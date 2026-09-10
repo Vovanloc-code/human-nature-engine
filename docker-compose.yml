@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: hne-postgres
+    environment:
+      POSTGRES_USER: hne
+      POSTGRES_PASSWORD: hne_dev_password
+      POSTGRES_DB: human_nature_engine
+    ports:
+      - "5433:5432"
+    volumes:
+      - hne_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hne -d human_nature_engine"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  hne_pgdata:

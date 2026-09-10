@@ -1,0 +1,450 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+enum InsightStatus {
+  candidate
+  approved
+  rejected
+  used
+  retired
+  needs_research
+}
+
+enum FeedbackAction {
+  approve
+  reject
+  edit
+  favorite
+  regenerate
+  publish
+}
+
+enum AgentRunStatus {
+  pending
+  running
+  succeeded
+  failed
+  cancelled
+}
+
+model Page {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  dna             PageDna?
+  contentAssets   ContentAsset[]
+  contentQueue    ContentQueue[]
+  publicationRecords PublicationRecord[]
+  preferenceWeights PreferenceWeight[]
+
+  @@map("pages")
+}
+
+model PageDna {
+  id          String   @id @default(cuid())
+  pageId      String   @unique @map("page_id")
+  topics      Json
+  voice       Json
+  visualMix   Json     @map("visual_mix")
+  formatMix   Json     @map("format_mix")
+  weights     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("page_dna")
+}
+
+model TaxonomyCategory {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  nodes TaxonomyNode[]
+
+  @@map("taxonomy_categories")
+}
+
+model TaxonomyNode {
+  id          String   @id @default(cuid())
+  categoryId  String   @map("category_id")
+  slug        String
+  name        String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  category TaxonomyCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, slug])
+  @@map("taxonomy_nodes")
+}
+
+model HumanInsight {
+  id                     String        @id @default(cuid())
+  statement              String
+  observation            String?
+  desire                 String?
+  hiddenFear             String?       @map("hidden_fear")
+  contradictoryBehavior  String?       @map("contradictory_behavior")
+  cost                   String?
+  primaryConflictId      String?       @map("primary_conflict_id")
+  secondaryConflicts     Json?         @map("secondary_conflicts")
+  universalityScore      Float?        @map("universality_score")
+  depthScore             Float?        @map("depth_score")
+  noveltyScore           Float?        @map("novelty_score")
+  recognitionScore       Float?        @map("recognition_score")
+  sourceType             String?       @map("source_type")
+  sourceReference        String?       @map("source_reference")
+  status                 InsightStatus @default(candidate)
+  metadata               Json?
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+
+  sources       InsightSource[]
+  concepts      Concept[]
+  ideaVault     IdeaVault?
+  feedbackEvents FeedbackEvent[]
+
+  @@index([status])
+  @@index([primaryConflictId])
+  @@map("human_insights")
+}
+
+model InsightSource {
+  id        String   @id @default(cuid())
+  insightId String   @map("insight_id")
+  kind      String
+  reference String?
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  insight HumanInsight @relation(fields: [insightId], references: [id], onDelete: Cascade)
+
+  @@map("insight_sources")
+}
+
+model Concept {
+  id          String   @id @default(cuid())
+  insightId   String   @map("insight_id")
+  title       String
+  angle       String?
+  hook        String?
+  thesis      String?
+  status      String   @default("draft")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  insight       HumanInsight   @relation(fields: [insightId], references: [id], onDelete: Cascade)
+  contentAssets ContentAsset[]
+
+  @@index([insightId])
+  @@map("concepts")
+}
+
+model ContentAsset {
+  id          String   @id @default(cuid())
+  conceptId   String?  @map("concept_id")
+  pageId      String?  @map("page_id")
+  title       String
+  format      String
+  body        String?
+  status      String   @default("draft")
+  publishedAt DateTime? @map("published_at")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  concept            Concept?            @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  page               Page?               @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  genome             ContentGenome?
+  visualConcepts     VisualConcept[]
+  qualityReviews     QualityReview[]
+  duplicateChecks    DuplicateCheck[]
+  contentQueue       ContentQueue[]
+  publicationRecords PublicationRecord[]
+  performanceMetrics PerformanceMetric[]
+
+  @@index([conceptId])
+  @@index([pageId])
+  @@map("content_assets")
+}
+
+model ContentGenome {
+  id                 String   @id @default(cuid())
+  contentAssetId     String   @unique @map("content_asset_id")
+  primaryConflict    String?  @map("primary_conflict")
+  secondaryConflicts Json?    @map("secondary_conflicts")
+  primaryEmotion     String?  @map("primary_emotion")
+  secondaryEmotion   String?  @map("secondary_emotion")
+  audienceWounds     Json?    @map("audience_wounds")
+  lenses             Json?
+  tones              Json?
+  depthLevel         String?  @map("depth_level")
+  structure          String?
+  visualMetaphor     String?  @map("visual_metaphor")
+  endingType         String?  @map("ending_type")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  contentAsset ContentAsset @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+
+  @@map("content_genomes")
+}
+
+model VisualConcept {
+  id             String   @id @default(cuid())
+  contentAssetId String?  @map("content_asset_id")
+  title          String
+  metaphor       String?
+  style          String?
+  palette        Json?
+  composition    String?
+  status         String   @default("draft")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  contentAsset ContentAsset? @relation(fields: [contentAssetId], references: [id], onDelete: SetNull)
+  visualAssets VisualAsset[]
+
+  @@map("visual_concepts")
+}
+
+model VisualAsset {
+  id              String   @id @default(cuid())
+  visualConceptId String   @map("visual_concept_id")
+  url             String?
+  kind            String
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  visualConcept VisualConcept @relation(fields: [visualConceptId], references: [id], onDelete: Cascade)
+
+  @@map("visual_assets")
+}
+
+model QualityReview {
+  id             String   @id @default(cuid())
+  contentAssetId String   @map("content_asset_id")
+  reviewer       String
+  score          Float?
+  verdict        String
+  notes          String?
+  criteria       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  contentAsset ContentAsset @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+
+  @@map("quality_reviews")
+}
+
+model DuplicateCheck {
+  id                  String   @id @default(cuid())
+  contentAssetId      String?  @map("content_asset_id")
+  comparedToId        String?  @map("compared_to_id")
+  insightId           String?  @map("insight_id")
+  comparedInsightId   String?  @map("compared_insight_id")
+  similarity          Float?
+  textSimilarity      Float?   @map("text_similarity")
+  insightSimilarity   Float?   @map("insight_similarity")
+  genomeSimilarity    Float?   @map("genome_similarity")
+  visualSimilarity    Float?   @map("visual_similarity")
+  verdict             String
+  notes               String?
+  details             Json?
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  contentAsset ContentAsset? @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+
+  @@index([insightId])
+  @@index([contentAssetId])
+  @@map("duplicate_checks")
+}
+
+model Embedding {
+  id         String                       @id @default(cuid())
+  objectType String                       @map("object_type")
+  objectId   String                       @map("object_id")
+  kind       String                       @default("default")
+  model      String                       @default("fixture")
+  dims       Int
+  values     Json
+  /// pgvector column — written/queried via raw SQL; Json `values` is source of truth in app
+  embedding  Unsupported("vector(64)")?
+  createdAt  DateTime                     @default(now()) @map("created_at")
+  updatedAt  DateTime                     @updatedAt @map("updated_at")
+
+  @@unique([objectType, objectId, kind])
+  @@index([objectType, objectId])
+  @@map("embeddings")
+}
+
+model ContentQueue {
+  id             String   @id @default(cuid())
+  contentAssetId String?  @map("content_asset_id")
+  pageId         String?  @map("page_id")
+  position       Int      @default(0)
+  status         String   @default("queued")
+  scheduledFor   DateTime? @map("scheduled_for")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  contentAsset ContentAsset? @relation(fields: [contentAssetId], references: [id], onDelete: SetNull)
+  page         Page?         @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  @@map("content_queue")
+}
+
+model PublicationRecord {
+  id             String   @id @default(cuid())
+  contentAssetId String   @map("content_asset_id")
+  pageId         String?  @map("page_id")
+  platform       String
+  externalId     String?  @map("external_id")
+  url            String?
+  publishedAt    DateTime @default(now()) @map("published_at")
+  metadata       Json?
+
+  contentAsset ContentAsset @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+  page         Page?        @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  @@map("publication_records")
+}
+
+model PerformanceMetric {
+  id             String   @id @default(cuid())
+  contentAssetId String   @map("content_asset_id")
+  metric         String
+  value          Float
+  capturedAt     DateTime @default(now()) @map("captured_at")
+  metadata       Json?
+
+  contentAsset ContentAsset @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+
+  @@index([contentAssetId, metric])
+  @@map("performance_metrics")
+}
+
+model FeedbackEvent {
+  id         String         @id @default(cuid())
+  objectType String         @map("object_type")
+  objectId   String         @map("object_id")
+  action     FeedbackAction
+  reason     String?
+  notes      String?
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  insightId String?       @map("insight_id")
+  insight   HumanInsight? @relation(fields: [insightId], references: [id], onDelete: SetNull)
+
+  @@index([objectType, objectId])
+  @@map("feedback_events")
+}
+
+model IdeaVault {
+  id          String   @id @default(cuid())
+  insightId   String   @unique @map("insight_id")
+  tier        String   @default("standard")
+  tags        Json?
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  insight HumanInsight @relation(fields: [insightId], references: [id], onDelete: Cascade)
+
+  @@map("idea_vault")
+}
+
+
+model PreferenceWeight {
+  id            String   @id @default(cuid())
+  pageId        String   @map("page_id")
+  /// Dimension of creative preference: visual_universe | format | tone | conflict | metaphor | caption_length
+  dimension     String
+  /// Concrete key within dimension (e.g. symbolic_surrealism, hard_truth, SELF/authenticity)
+  key           String
+  /// Signed preference in roughly [-1, 1]; negative = dislike, positive = like
+  weight        Float    @default(0)
+  evidenceCount Int      @default(0) @map("evidence_count")
+  approveCount  Int      @default(0) @map("approve_count")
+  rejectCount   Int      @default(0) @map("reject_count")
+  favoriteCount Int      @default(0) @map("favorite_count")
+  editCount     Int      @default(0) @map("edit_count")
+  /// 0–1 confidence from evidence volume
+  confidence    Float    @default(0)
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, dimension, key])
+  @@index([pageId])
+  @@index([dimension, key])
+  @@map("preference_weights")
+}
+
+model PromptVersion {
+  id        String   @id @default(cuid())
+  agent     String
+  version   String
+  body      String
+  isActive  Boolean  @default(false) @map("is_active")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([agent, version])
+  @@map("prompt_versions")
+}
+
+model AgentRun {
+  id          String         @id @default(cuid())
+  runId       String         @unique @map("run_id")
+  agent       String
+  status      AgentRunStatus @default(pending)
+  input       Json?
+  output      Json?
+  error       String?
+  startedAt   DateTime?      @map("started_at")
+  finishedAt  DateTime?      @map("finished_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  logs RunLog[]
+
+  @@index([agent, status])
+  @@map("agent_runs")
+}
+
+model RunLog {
+  id         String   @id @default(cuid())
+  agentRunId String   @map("agent_run_id")
+  level      String   @default("info")
+  message    String
+  data       Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  @@index([agentRunId])
+  @@map("run_logs")
+}

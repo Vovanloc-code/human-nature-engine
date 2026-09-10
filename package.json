@@ -1,0 +1,49 @@
+{
+  "name": "human-nature-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Human Nature Content Engine \u2014 insight-first content production system",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "prisma migrate deploy && prisma generate",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force",
+    "insights:create": "tsx src/cli/insights-create.ts",
+    "insights:search": "tsx src/cli/insights-search.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "postinstall": "prisma generate",
+    "pipeline:discover": "tsx src/cli/pipeline-discover.ts",
+    "prompts:seed": "tsx src/cli/prompts-seed.ts",
+    "pipeline:produce": "tsx src/cli/pipeline-produce.ts",
+    "dedup:check": "tsx src/cli/dedup-check.ts",
+    "editor:rank": "tsx src/cli/editor-rank.ts",
+    "pipeline:today": "tsx src/cli/pipeline-today.ts",
+    "performance:ingest": "tsx src/cli/performance-ingest.ts",
+    "publish:run": "tsx src/cli/publish-run.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.5.0",
+    "next": "^15.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "prisma": "^6.5.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}
