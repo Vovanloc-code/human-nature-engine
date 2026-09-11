@@ -103,9 +103,26 @@ export default async function ReviewPage({
 
         <section className="panel stack">
           <h2>Visual Concept</h2>
-          <div className="visual-ph">
-            {detail.visualConcept?.title ?? "Visual preview placeholder"}
+          <div className="visual-ph" style={{ padding: detail.visualPreview?.imageUrl ? 0 : undefined, overflow: "hidden" }}>
+            {detail.visualPreview?.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={detail.visualPreview.imageUrl}
+                alt={detail.visualConcept?.title ?? "Generated visual"}
+                style={{ width: "100%", display: "block", minHeight: 160, objectFit: "cover" }}
+              />
+            ) : (
+              detail.visualConcept?.title ?? "Visual preview placeholder"
+            )}
           </div>
+          {detail.facebookReadiness && (
+            <div className="small">
+              Facebook readiness:{" "}
+              {detail.facebookReadiness.ready
+                ? `READY (${detail.facebookReadiness.publishMode})`
+                : `BLOCKED — ${detail.facebookReadiness.reasons.join("; ")}`}
+            </div>
+          )}
           <div className="small muted">
             Metaphor: {detail.visualConcept?.metaphor ?? "—"}
             <br />

@@ -11,6 +11,9 @@ export type PublishPlatform =
 
 export type PublishMode = "live" | "dry-run" | "fixture";
 
+/** Phase 9: text feed vs image photos flow */
+export type FacebookPublishMode = "facebook_text" | "facebook_image";
+
 export type PublishableAsset = {
   id: string;
   title: string;
@@ -19,6 +22,10 @@ export type PublishableAsset = {
   status?: string;
   metadata?: unknown;
   pageId?: string | null;
+  /** Optional local image path for image publish modes */
+  imagePath?: string | null;
+  imageMimeType?: string | null;
+  generatedMediaId?: string | null;
 };
 
 export type PublishPageContext = {
@@ -33,6 +40,11 @@ export type PublishOptions = {
   /** Force dry-run even if credentials exist */
   dryRun?: boolean;
   caption?: string;
+  /** facebook_text (default) | facebook_image */
+  publishMode?: FacebookPublishMode | string;
+  /** Local path or public URL for image post */
+  imagePath?: string;
+  imageUrl?: string;
   /** Extra platform-specific fields (never secrets) */
   extras?: Record<string, unknown>;
 };
@@ -43,6 +55,9 @@ export type PublishResult = {
   raw: Record<string, unknown>;
   mode: PublishMode;
   platform: PublishPlatform | string;
+  /** Echo publish mode used */
+  publishMode?: string;
+  assetType?: "text" | "image";
 };
 
 export interface PublisherAdapter {

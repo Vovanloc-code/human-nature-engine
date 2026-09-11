@@ -82,3 +82,10 @@ See `src/agents/types.ts`.
 - REST: `POST /api/publish`, `GET /api/publish` (publisher status)
 - UI: Queue Publish button + Settings publisher configuration status
 
+## Phase 9 surface
+- Media providers: `src/providers/media` — fixture real PNG + optional OpenAI Images
+- GeneratedMedia + Visual QC: `src/engine/media`, `src/engine/visual-qc`
+- Facebook modes: `facebook_text` | `facebook_image` (`src/providers/publishers/facebook`)
+- Stage A slice: `npm run phase9:slice -- --page the-war-within` (dry-run FB only)
+- Media serve: `GET /api/media/[id]`
+- `/today` shows real image preview + Facebook readiness

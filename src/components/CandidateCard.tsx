@@ -22,9 +22,24 @@ export type CandidateCardData = {
     title: string | null;
     metaphor: string | null;
     style: string | null;
-    placeholder: true;
+    placeholder: boolean;
+    imageUrl?: string | null;
+    generatedMediaId?: string | null;
+    qcStatus?: string | null;
+    qcVerdict?: string | null;
   };
   similarityWarning: string | null;
+  humanInsightSummary?: string | null;
+  whyItMatters?: string | null;
+  facebookReadiness?: {
+    ready: boolean;
+    reasons: string[];
+    publishMode: string;
+  };
+  queueStatus?: string | null;
+  slopScore?: number | null;
+  editorScore?: number | null;
+  visualQcScore?: number | null;
 };
 
 const ACTIONS = [
@@ -96,6 +111,8 @@ export function CandidateCardView({
     }
   }
 
+  const imgUrl = candidate.visualPreview.imageUrl;
+
   return (
     <article className="card">
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -107,6 +124,9 @@ export function CandidateCardView({
             <span className="badge ok">{candidate.verdict}</span>
           )}
           <span className="badge">{candidate.status}</span>
+          {candidate.queueStatus && (
+            <span className="badge">queue:{candidate.queueStatus}</span>
+          )}
         </div>
       </div>
 
@@ -118,14 +138,50 @@ export function CandidateCardView({
         </div>
       </div>
 
-      <div className="visual-ph">
-        {candidate.visualPreview.title ||
-          candidate.visualPreview.metaphor ||
-          "Visual preview placeholder"}
-        {candidate.visualPreview.style
-          ? ` · ${candidate.visualPreview.style}`
-          : ""}
+      {candidate.humanInsightSummary && (
+        <div>
+          <div className="muted small">Human Insight</div>
+          <div className="small">{candidate.humanInsightSummary}</div>
+        </div>
+      )}
+      {candidate.whyItMatters && (
+        <div>
+          <div className="muted small">Why it matters</div>
+          <div className="small">{candidate.whyItMatters}</div>
+        </div>
+      )}
+
+      <div className="visual-ph" style={{ padding: imgUrl ? 0 : undefined, overflow: "hidden" }}>
+        {imgUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imgUrl}
+            alt={candidate.visualPreview.title ?? "Generated visual"}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+              minHeight: 140,
+            }}
+          />
+        ) : (
+          <>
+            {candidate.visualPreview.title ||
+              candidate.visualPreview.metaphor ||
+              "Visual preview placeholder"}
+            {candidate.visualPreview.style
+              ? ` · ${candidate.visualPreview.style}`
+              : ""}
+          </>
+        )}
       </div>
+      {(candidate.visualPreview.qcStatus || candidate.visualPreview.qcVerdict) && (
+        <div className="small muted">
+          Visual QC: {candidate.visualPreview.qcVerdict ?? candidate.visualPreview.qcStatus}
+          {candidate.visualQcScore != null ? ` (${candidate.visualQcScore})` : ""}
+        </div>
+      )}
 
       {candidate.imageText && (
         <div>
@@ -135,20 +191,45 @@ export function CandidateCardView({
       )}
       {candidate.caption && (
         <div>
-          <div className="muted small">Caption preview</div>
+          <div className="muted small">Caption / final copy</div>
           <div className="small">{candidate.caption}</div>
         </div>
       )}
 
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        {candidate.editorScore != null && (
+          <span className="badge">Editor {candidate.editorScore.toFixed(0)}</span>
+        )}
+        {candidate.slopScore != null && (
+          <span className="badge">Slop {candidate.slopScore.toFixed(0)}</span>
+        )}
+        {candidate.visualQcScore != null && (
+          <span className="badge">VisualQC {candidate.visualQcScore.toFixed(0)}</span>
+        )}
+      </div>
+
       {candidate.whySelected && (
         <div>
-          <div className="muted small">WHY AI PICKED THIS</div>
+          <div className="muted small">WHY SELECTED</div>
           <div className="small">{candidate.whySelected}</div>
         </div>
       )}
 
       {candidate.similarityWarning && (
         <div className="warn-text small">⚠ {candidate.similarityWarning}</div>
+      )}
+
+      {candidate.facebookReadiness && (
+        <div className="small">
+          <span className="muted">Facebook readiness: </span>
+          {candidate.facebookReadiness.ready ? (
+            <span className="badge ok">READY ({candidate.facebookReadiness.publishMode})</span>
+          ) : (
+            <span className="badge">
+              BLOCKED — {candidate.facebookReadiness.reasons.join("; ") || "incomplete"}
+            </span>
+          )}
+        </div>
       )}
 
       <div className="actions">

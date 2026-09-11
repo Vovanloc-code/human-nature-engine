@@ -12,3 +12,6 @@ export * from "./embeddings";
 export * from "./editorial";
 export * from "./review";
 export * from "./publishing";
+export * from "./media";
+export * from "./visual-qc";
+export * from "./phase9/slice";

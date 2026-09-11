@@ -24,7 +24,12 @@ import {
 
 export * from "./types";
 export { fixturePublisher } from "./fixture";
-export { facebookPublisher } from "./facebook";
+export {
+  facebookPublisher,
+  buildFacebookImagePayload,
+  resolveFacebookPublishMode,
+  facebookCredentialsPresent,
+} from "./facebook";
 export { instagramPublisher } from "./instagram";
 export { wordpressPublisher } from "./wordpress";
 

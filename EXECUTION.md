@@ -1,9 +1,10 @@
 # EXECUTION.md — Living status
 
 ## Current phase
-**Phase 8 — Distribution: COMPLETE** (connector architecture + fixture path; live APIs gated on env)
+**Phase 9 — LIVE VERTICAL SLICE: COMPLETE (Stage A — dry-run)**  
+Waiting: **APPROVE LIVE TEST** before any live Facebook publish.
 
-## Top-level status (Phases 1–8)
+## Top-level status (Phases 1–9)
 
 | Phase | Focus | Status |
 |-------|--------|--------|
@@ -15,6 +16,7 @@
 | 6 | UI / review / queue | COMPLETE |
 | 7 | Learning (preferences + performance overlays) | COMPLETE |
 | 8 | Distribution (publish connectors + records) | COMPLETE |
+| 9 | Live vertical slice (image gen + visual QC + FB image dry-run) | **COMPLETE (Stage A)** |
 
 ### v0.1 acceptance checklist
 - [x] Generate path exists via UI (`/today` → generate) and API (`POST /api/today/generate`)
@@ -23,142 +25,79 @@
 - [x] Feedback + preference learning without rewriting Page DNA (Phase 7)
 - [x] Publication connectors architecture with working fixture / dry-run path (Phase 8)
 - [x] Live FB/IG/WP gated on env credentials (no hard-coded secrets)
+- [x] Real image generation path (fixture PNG file always; live OpenAI Images when `OPENAI_API_KEY`)
+- [x] GeneratedMedia first-class provenance + Visual QC gate (queue only PASS when media present)
+- [x] Facebook `facebook_image` dry-run payload (Stage A — no auto live publish)
 - [ ] Auth (deferred — single-user)
 - [ ] Fully automatic live publishing without credentials (explicitly out of scope for v0.1)
+- [ ] **Stage A APPROVE LIVE TEST** (human gate before live FB)
 
 ## Completed work
 
-### Phase 1 (still green)
-- [x] Project scaffold, Prisma schema, taxonomy + 101 insights, Idea Vault, page DNA
-- [x] Engine helpers, CLI insights create/search, REST `/api/insights`
-- [x] **vitest Phase 1: 8/8**
+### Phase 1–8 (still green)
+See prior sections; **vitest Phases 1–8: 43/43** remain green.
 
-### Phase 2 (still green)
-- [x] Provider adapter (fixture default; optional OpenAI / xAI)
-- [x] Philosophical lenses (9)
-- [x] A1 Insight Scout, A2 Insight Critic, A3 Concept Architect, A6 Slop Critic
-- [x] Prompt versioning; discovery pipeline + CLI
-- [x] **vitest Phase 2: 6/6**
+### Phase 9 — Live vertical slice
+- [x] Media generation provider layer (`src/providers/media`) — fixture writes **real PNG files**; live OpenAI Images when `OPENAI_API_KEY` present; never claims live success without a readable file
+- [x] `GeneratedMedia` table + VisualAsset provenance columns (migration `20260911090000_phase9_generated_media`)
+- [x] Wire Visual Director → Image Provider → GeneratedMedia → Visual QC → Content Asset
+- [x] Visual QC gate: dimensions/aspect, file readable, no placeholder, failure signals, concept match, text-safe, motif overuse, Page DNA fit, visual dedup, content/visual agreement → `PASS|REGENERATE|REJECT`
+- [x] Approve→queue blocked when media exists and QC ≠ PASS
+- [x] Facebook publishers: `facebook_text` (/feed) + `facebook_image` (Graph `/photos`); dry-run image payload without credentials; idempotent duplicate prevention
+- [x] Stage A CLI: `npm run phase9:slice -- --page the-war-within` → preview package JSON + image, **Facebook DRY RUN only**
+- [x] `/today` control surface: insight, why it matters, copy, **actual image preview** (`/api/media/[id]`), editor/slop/visual QC scores, WHY SELECTED, queue status, Facebook readiness
+- [x] **vitest Phase 9: 10/10** (total **53/53**)
+- [x] Real content day (fixture-safe): ran Stage A for `the-war-within` with real PNGs + ranked shortlist; LIVE_LLM / LIVE_IMAGE documented as blocked without keys
 
-### Phase 3 (still green)
-- [x] A4 Writer + A5 Visual Director; production pipeline; CLI `pipeline:produce`
-- [x] **vitest Phase 3: 4/4**
+#### Gaps closed (from audit)
+| Gap | Status |
+|-----|--------|
+| A. IMAGE_GENERATION=MISSING | **CLOSED** — real files under `storage/generated/` (fixture) or downloaded live |
+| B. FACEBOOK_IMAGE_PUBLISH=MISSING | **CLOSED** — `facebook_image` mode + dry-run |
+| C. LIVE_LLM=NEVER_EXERCISED | **GATED** — fixture kept for tests; live path when keys exist (Stage A waiting APPROVE LIVE TEST) |
+| D. MEDIA_PROVENANCE=PARTIAL | **CLOSED** — first-class `generated_media` columns |
 
-### Phase 4 (still green)
-- [x] A7 Dedup Judge — TEXT / INSIGHT / GENOME / VISUAL similarities
-- [x] Embeddings + pgvector; production auto-dedup; CLI `dedup:check`
-- [x] **vitest Phase 4: 6/6**
+#### Credential classes needed (names only — never paste values)
+- `OPENAI_API_KEY` — live LLM + live image generation
+- `OPENAI_IMAGE_MODEL` — optional (default `dall-e-3`)
+- `FACEBOOK_PAGE_ACCESS_TOKEN` — live Facebook publish
+- `FACEBOOK_PAGE_ID` — live Facebook publish
+- Optional: `XAI_API_KEY`, `HNE_IMAGE_PROVIDER`, `HNE_MEDIA_DIR`
 
-### Phase 5 (still green)
-- [x] A8 Editor-in-Chief — final 100-pt ranking + WHY_THIS_WAS_SELECTED
-- [x] Daily pipeline `pipeline:today`; CLI `editor:rank`
-- [x] **vitest Phase 5: 6/6**
-
-### Phase 6 (still green)
-- [x] App shell nav + TODAY / Review / Idea Vault / Queue / Pages UI
-- [x] Review actions → `content_queue` + `feedback_events`
-- [x] **vitest Phase 6: 5/5**
-
-### Phase 7 (still green)
-- [x] `preference_weights` + performance ingest + ranking soft-boost
-- [x] Publication record hooks prepared for Phase 8
-- [x] **vitest Phase 7: 4/4**
-
-### Phase 8
-- [x] Publisher adapters: `fixture`, `facebook`, `instagram`, `wordpress` under `src/providers/publishers`
-- [x] Abstract `publish(asset, page, options) => { externalId, url, raw }` (+ mode)
-- [x] Live Graph/WP REST only when env credentials present; else dry-run/fixture (no secret leakage)
-- [x] Orchestration: `publication_records` + asset `status=published` + `published_at` + queue update + `feedback_events` publish
-- [x] Multi-platform records for the same asset
-- [x] CLI `npm run publish:run`; API `POST /api/publish` + `GET /api/publish`
-- [x] Queue UI Publish button (platform select); Settings shows publisher configuration status
-- [x] Env vars documented in `.env.example`
-- [x] **vitest Phase 8: 4/4** (total **43/43** with Phases 1–7)
+#### Stage A status
+**WAITING: APPROVE LIVE TEST** before enabling live Facebook publish.  
+Dry-run path is green. Do **not** auto-publish live.
 
 ## Open issues
-- Live LLM / live embed path untested without keys (by design)
-- Live FB/IG/WP paths require real credentials (gated; dry-run without them)
-- Parent must push to GitHub (do not push from this agent)
+- Live LLM / live image untested in this environment (no API keys in `.env`)
+- Live FB requires APPROVE LIVE TEST + credentials
+- Parent must push branch to GitHub (do not push from this agent)
 - Auth still deferred (single-user)
 
 ## Decisions
 - Fixture provider remains default for CI (`HNE_PROVIDER=fixture`)
-- Publisher default for tests / missing keys: fixture or platform dry-run
-- Preference learning is a **weighted overlay**, never a Page DNA rewrite
-- Soft boosts never rescue candidates below editor QC floor / hard dedup fails
-- Evidence threshold default **N≥5** (`EVIDENCE_THRESHOLD`)
+- Image provider defaults to fixture when no `OPENAI_API_KEY` / forced fixture — writes real PNG bytes (not `fixture://` fake URLs)
+- Visual QC PASS required to queue **when** generated media exists (legacy text-only approve still works without media)
+- Facebook image posts use Graph Page `/photos` with caption; text remains `/feed`
+- Idempotent publish: duplicate prevention per asset+platform(+facebook publishMode)
+- Preference learning remains a weighted overlay, never a Page DNA rewrite
 - Postgres remains on host **:5433**
 - Never hard-code publishing secrets; document only in `.env.example`
 
+## Artifacts
+- Preview package: `artifacts/phase9/preview-latest.json` (gitignored runtime)
+- Sample committed PNG: `storage/generated/fixture-sample.png`
+- CLI: `npm run phase9:slice -- --page the-war-within [--fixture]`
+
 ## Test status
-**PASS — 2026-09-10 04:27 UTC (2026-09-10 11:27 Asia/Saigon)**
+**PASS — 2026-09-11 01:45 UTC (2026-09-11 08:45 Asia/Saigon)**
 
 ```
+ ✓ tests/phase9.test.ts (10 tests)
  ✓ tests/phase8.test.ts (4 tests)
- ✓ tests/phase7.test.ts (4 tests)
- ✓ tests/phase6.test.ts (5 tests)
- ✓ tests/phase5.test.ts (6 tests)
- ✓ tests/phase4.test.ts (6 tests)
- ✓ tests/phase3.test.ts (4 tests)
- ✓ tests/phase2.test.ts (6 tests)
- ✓ tests/phase1.test.ts (8 tests)
- Test Files  8 passed (8)
-      Tests  43 passed (43)
+ … Phases 1–7 …
+ Test Files  9 passed (9)
+      Tests  53 passed (53)
 ```
 
-Phase 8 coverage:
-1. Fixture publish → publication_record + asset published (+ published_at) + feedback
-2. Queue item publish flow (+ API)
-3. Missing live credentials → safe dry-run (no secret leakage)
-4. Multi-platform publication_records for same asset
-5. Phases 1–7 still pass (39 prior + 4 new = 43)
-
-
-## Exact commands
-```bash
-cd /workspace/human-nature-engine
-export DOCKER_HOST=tcp://127.0.0.1:2375
-export PATH="/workspace/bin:$PATH"
-export HNE_PROVIDER=fixture   # CI / no keys
-
-docker compose up -d
-npm install
-npx prisma migrate deploy
-npm run db:seed
-npm run prompts:seed
-npm test
-
-# UI
-npm run dev
-# open http://localhost:3000/queue  (Publish button)
-# open http://localhost:3000/settings  (publisher status)
-
-# Publish
-npm run publish:run -- --queue-id <id> --platform fixture
-npm run publish:run -- --asset <id> --platform facebook
-# (facebook/instagram/wordpress dry-run without credentials)
-
-# Prior CLI
-npm run performance:ingest -- --asset <id> --fixture
-npm run pipeline:today -- --page the-war-within --target 12
-```
-
-Optional live publishers (not required for tests):
-```bash
-export FACEBOOK_PAGE_ACCESS_TOKEN=...
-export FACEBOOK_PAGE_ID=...
-export INSTAGRAM_ACCESS_TOKEN=...
-export INSTAGRAM_BUSINESS_ACCOUNT_ID=...
-export WP_URL=https://example.com
-export WP_USERNAME=...
-export WP_APP_PASSWORD=...
-```
-
-Optional live LLM providers (not required for tests):
-```bash
-export HNE_PROVIDER=auto   # or openai / xai
-export OPENAI_API_KEY=...
-```
-
-## Parent push
-Do **not** `git push` from this agent. Parent handles GitHub upload for `Vovanloc-code/human-nature-engine` (exclude `node_modules`, `.next`, `.env`).
+**Build:** `npm run build` PASS (Next.js 15) — includes `/api/media/[id]`.

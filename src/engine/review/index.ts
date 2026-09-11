@@ -8,6 +8,8 @@ import { prisma } from "@/db";
 import { recordFeedback } from "@/engine/feedback";
 import { runProductionPipeline } from "@/engine/production/pipeline";
 import { directVisual } from "@/agents/visual-director";
+import { produceImageForAsset } from "@/engine/media";
+import { runVisualQc } from "@/engine/visual-qc";
 import type { FeedbackAction, Prisma } from "@prisma/client";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -47,8 +49,23 @@ export type CandidateCard = {
     title: string | null;
     metaphor: string | null;
     style: string | null;
-    placeholder: true;
+    placeholder: boolean;
+    imageUrl: string | null;
+    generatedMediaId: string | null;
+    qcStatus: string | null;
+    qcVerdict: string | null;
   };
+  humanInsightSummary: string | null;
+  whyItMatters: string | null;
+  facebookReadiness: {
+    ready: boolean;
+    reasons: string[];
+    publishMode: string;
+  };
+  queueStatus: string | null;
+  slopScore: number | null;
+  editorScore: number | null;
+  visualQcScore: number | null;
   similarityWarning: string | null;
   insightId: string | null;
 };
@@ -205,6 +222,8 @@ async function loadAssetBundle(id: string) {
       qualityReviews: { orderBy: { createdAt: "desc" }, take: 5 },
       duplicateChecks: { orderBy: { createdAt: "desc" }, take: 5 },
       concept: { include: { insight: true } },
+      generatedMedia: { orderBy: { createdAt: "desc" }, take: 1 },
+      contentQueue: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
   if (!asset) throw new Error(`Content asset not found: ${id}`);
@@ -248,14 +267,59 @@ function toCard(
     caption: metaString(meta, "caption"),
     hook: metaString(meta, "hook") ?? asset.concept?.hook ?? null,
     body: asset.body,
-    visualPreview: {
-      title: visual?.title ?? null,
-      metaphor: visual?.metaphor ?? null,
-      style: visual?.style ?? (typeof vMeta.universe === "string" ? vMeta.universe : null),
-      placeholder: true,
-    },
+    visualPreview: (() => {
+      const media = (asset as { generatedMedia?: Array<{ id: string; qcStatus: string }> }).generatedMedia?.[0];
+      const imageUrl = media ? `/api/media/${media.id}` : null;
+      const vqc = asset.qualityReviews.find((r) => r.reviewer === "visual-qc");
+      return {
+        title: visual?.title ?? null,
+        metaphor: visual?.metaphor ?? null,
+        style: visual?.style ?? (typeof vMeta.universe === "string" ? vMeta.universe : null),
+        placeholder: !imageUrl,
+        imageUrl,
+        generatedMediaId: media?.id ?? null,
+        qcStatus: media?.qcStatus ?? null,
+        qcVerdict: vqc?.verdict ?? null,
+      };
+    })(),
     similarityWarning: similarityWarningFromChecks(asset.duplicateChecks),
     insightId: asset.concept?.insightId ?? null,
+    humanInsightSummary: asset.concept?.insight?.statement ?? null,
+    whyItMatters:
+      asset.concept?.insight?.cost ??
+      asset.concept?.insight?.observation ??
+      null,
+    facebookReadiness: (() => {
+      const media = (asset as { generatedMedia?: Array<{ id: string; qcStatus: string; storagePath: string }> }).generatedMedia?.[0];
+      const vqc = asset.qualityReviews.find((r) => r.reviewer === "visual-qc");
+      const reasons: string[] = [];
+      if (!media) reasons.push("missing generated image");
+      else if (media.qcStatus !== "pass" && vqc?.verdict !== "PASS") {
+        reasons.push(`visual QC not PASS (${media.qcStatus}/${vqc?.verdict ?? "n/a"})`);
+      }
+      const hard = asset.duplicateChecks.some((d) => d.verdict === "hard_duplicate");
+      if (hard) reasons.push("hard duplicate");
+      if (!metaString((asset.metadata ?? {}) as Record<string, unknown>, "caption") && !asset.body) {
+        reasons.push("missing caption/body");
+      }
+      return {
+        ready: reasons.length === 0 && Boolean(media),
+        reasons,
+        publishMode: media ? "facebook_image" : "facebook_text",
+      };
+    })(),
+    queueStatus:
+      (asset as { contentQueue?: Array<{ status: string }> }).contentQueue?.[0]?.status ??
+      (asset.status === "queued" || asset.status === "published" ? asset.status : null),
+    slopScore: (() => {
+      const slop = asset.qualityReviews.find((r) => r.reviewer === "slop-critic");
+      return slop?.score ?? null;
+    })(),
+    editorScore: editorReview?.score ?? null,
+    visualQcScore: (() => {
+      const vqc = asset.qualityReviews.find((r) => r.reviewer === "visual-qc");
+      return vqc?.score ?? null;
+    })(),
   };
 }
 
@@ -292,6 +356,8 @@ export async function listCandidates(opts: {
       qualityReviews: { orderBy: { createdAt: "desc" }, take: 5 },
       duplicateChecks: { orderBy: { createdAt: "desc" }, take: 5 },
       concept: { include: { insight: true } },
+      generatedMedia: { orderBy: { createdAt: "desc" }, take: 1 },
+      contentQueue: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 
@@ -515,6 +581,24 @@ export async function applyReviewAction(
 
   switch (input.action) {
     case "approve": {
+      // Phase 9: if generated media exists, require Visual QC PASS before queue
+      const latestMedia = await prisma.generatedMedia.findFirst({
+        where: { contentAssetId: asset.id },
+        orderBy: { createdAt: "desc" },
+      });
+      if (latestMedia) {
+        const vqc = await prisma.qualityReview.findFirst({
+          where: { contentAssetId: asset.id, reviewer: "visual-qc" },
+          orderBy: { createdAt: "desc" },
+        });
+        const pass =
+          latestMedia.qcStatus === "pass" || vqc?.verdict === "PASS";
+        if (!pass) {
+          throw new Error(
+            `Cannot queue: visual QC is ${latestMedia.qcStatus}${vqc ? `/${vqc.verdict}` : ""} (need PASS)`
+          );
+        }
+      }
       const position = await nextQueuePosition(asset.pageId);
       const queueItem = await prisma.contentQueue.create({
         data: {
@@ -646,10 +730,25 @@ export async function applyReviewAction(
       break;
     }
     case "regenerate_visual": {
-      await directVisual({
+      const visual = await directVisual({
         contentAssetId: asset.id,
         persist: true,
       });
+      if (visual.visualConceptId) {
+        try {
+          const img = await produceImageForAsset({
+            contentAssetId: asset.id,
+            visualConceptId: visual.visualConceptId,
+          });
+          await runVisualQc({
+            contentAssetId: asset.id,
+            generatedMediaId: img.media.id,
+            persist: true,
+          });
+        } catch {
+          // keep visual brief; image failure surfaces via readiness
+        }
+      }
       break;
     }
   }

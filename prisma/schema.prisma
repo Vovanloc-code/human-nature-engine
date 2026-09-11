@@ -183,6 +183,7 @@ model ContentAsset {
   contentQueue       ContentQueue[]
   publicationRecords PublicationRecord[]
   performanceMetrics PerformanceMetric[]
+  generatedMedia     GeneratedMedia[]
 
   @@index([conceptId])
   @@index([pageId])
@@ -224,8 +225,9 @@ model VisualConcept {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  contentAsset ContentAsset? @relation(fields: [contentAssetId], references: [id], onDelete: SetNull)
-  visualAssets VisualAsset[]
+  contentAsset   ContentAsset?    @relation(fields: [contentAssetId], references: [id], onDelete: SetNull)
+  visualAssets   VisualAsset[]
+  generatedMedia GeneratedMedia[]
 
   @@map("visual_concepts")
 }
@@ -235,6 +237,13 @@ model VisualAsset {
   visualConceptId String   @map("visual_concept_id")
   url             String?
   kind            String
+  storagePath     String?  @map("storage_path")
+  mimeType        String?  @map("mime_type")
+  width           Int?
+  height          Int?
+  provider        String?
+  model           String?
+  generationId    String?  @map("generation_id")
   metadata        Json?
   createdAt       DateTime @default(now()) @map("created_at")
 
@@ -447,4 +456,44 @@ model RunLog {
 
   @@index([agentRunId])
   @@map("run_logs")
+}
+
+enum MediaQcStatus {
+  pending
+  pass
+  regenerate
+  reject
+}
+
+model GeneratedMedia {
+  id                  String        @id @default(cuid())
+  contentAssetId      String?       @map("content_asset_id")
+  visualConceptId     String?       @map("visual_concept_id")
+  storagePath         String        @map("storage_path")
+  url                 String?
+  mimeType            String        @map("mime_type") @default("image/png")
+  width               Int?
+  height              Int?
+  provider            String
+  model               String?
+  generationId        String?       @map("generation_id")
+  prompt              String
+  promptVersion       String?       @map("prompt_version")
+  negativeConstraints Json?         @map("negative_constraints")
+  qcStatus            MediaQcStatus @default(pending) @map("qc_status")
+  qcNotes             String?       @map("qc_notes")
+  qcDetails           Json?         @map("qc_details")
+  published           Boolean       @default(false)
+  publicationRecordId String?       @map("publication_record_id")
+  metadata            Json?
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  contentAsset  ContentAsset?  @relation(fields: [contentAssetId], references: [id], onDelete: SetNull)
+  visualConcept VisualConcept? @relation(fields: [visualConceptId], references: [id], onDelete: SetNull)
+
+  @@index([contentAssetId])
+  @@index([visualConceptId])
+  @@index([qcStatus])
+  @@map("generated_media")
 }

@@ -23,6 +23,8 @@ import {
 } from "@/engine/embeddings";
 import type { WriterDraft, VisualDirection, ConceptDraft } from "@/agents/types";
 import type { DedupJudgeResult } from "@/agents/dedup-judge";
+import { produceImageForAsset } from "@/engine/media";
+import { runVisualQc, type VisualQcResult } from "@/engine/visual-qc";
 
 export type ProductionPipelineOpts = {
   insightId?: string;
@@ -38,6 +40,12 @@ export type ProductionPipelineOpts = {
   runId?: string;
   /** Run Dedup Judge after writing/visual (Phase 4). Default true when persist. */
   dedup?: boolean;
+  /** Phase 9: generate real image after Visual Director. Default true when persist. */
+  generateImage?: boolean;
+  /** Phase 9: run visual QC after image gen. Default true when image generated. */
+  visualQc?: boolean;
+  forceFixtureImage?: boolean;
+  imageOutputDir?: string;
 };
 
 export type ProductionPipelineResult = {
@@ -53,6 +61,9 @@ export type ProductionPipelineResult = {
   visualAssetId?: string;
   provider: string;
   dedup?: DedupJudgeResult;
+  generatedMediaId?: string;
+  imagePath?: string;
+  visualQc?: VisualQcResult;
 };
 
 export async function runProductionPipeline(
@@ -183,6 +194,64 @@ export async function runProductionPipeline(
       universe: visual.direction.universe,
     });
 
+    // Phase 9: Image generation + Visual QC
+    let generatedMediaId: string | undefined;
+    let imagePath: string | undefined;
+    let visualQcResult: VisualQcResult | undefined;
+    const doImage = persist && opts.generateImage !== false;
+    if (doImage && visual.visualConceptId) {
+      await appendRunLog(pipelineRun.id, "info", "Starting image generation", {
+        visualConceptId: visual.visualConceptId,
+      });
+      try {
+        const img = await produceImageForAsset({
+          contentAssetId: written.contentAssetId,
+          visualConceptId: visual.visualConceptId,
+          forceFixture: opts.forceFixtureImage,
+          outputDir: opts.imageOutputDir,
+        });
+        generatedMediaId = img.media.id;
+        imagePath = img.generation.mediaPath;
+        await appendRunLog(pipelineRun.id, "info", "Image generated", {
+          generatedMediaId,
+          provider: img.generation.provider,
+          path: imagePath,
+        });
+        if (opts.visualQc !== false) {
+          visualQcResult = await runVisualQc({
+            contentAssetId: written.contentAssetId,
+            generatedMediaId,
+            persist: true,
+          });
+          await appendRunLog(pipelineRun.id, "info", "Visual QC complete", {
+            verdict: visualQcResult.verdict,
+            score: visualQcResult.score,
+          });
+        }
+      } catch (imgErr) {
+        const msg = imgErr instanceof Error ? imgErr.message : String(imgErr);
+        await appendRunLog(pipelineRun.id, "error", "Image generation failed", {
+          error: msg,
+        });
+        // Do not fabricate success — surface failure but allow pipeline to continue
+        // with visual brief only (Stage A slice will treat missing PASS as not ready)
+        visualQcResult = {
+          verdict: "REJECT",
+          checks: [
+            {
+              id: "media_present",
+              ok: false,
+              severity: "fail",
+              message: msg,
+            },
+          ],
+          score: 0,
+          notes: msg,
+          contentAssetId: written.contentAssetId,
+        };
+      }
+    }
+
     // Phase 4: persist embeddings + optional Dedup Judge
     let dedupResult: DedupJudgeResult | undefined;
     if (persist) {
@@ -226,6 +295,9 @@ export async function runProductionPipeline(
       genomeId: written.genomeId,
       visualConceptId: visual.visualConceptId,
       provider: written.provider,
+      generatedMediaId,
+      imagePath,
+      visualQcVerdict: visualQcResult?.verdict,
       dedupVerdict: dedupResult?.primary?.verdict,
       dedupCombined: dedupResult?.primary?.combined,
     };
@@ -245,6 +317,9 @@ export async function runProductionPipeline(
       visualAssetId: visual.visualAssetId,
       provider: written.provider,
       dedup: dedupResult,
+      generatedMediaId,
+      imagePath,
+      visualQc: visualQcResult,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

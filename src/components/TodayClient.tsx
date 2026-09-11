@@ -82,7 +82,7 @@ export function TodayClient({ initialPages }: { initialPages: PageRow[] }) {
       <div>
         <h1>Today</h1>
         <p className="lead">
-          Daily editorial shortlist — generate, review, approve into the queue.
+          Daily editorial shortlist — insight, copy, real image preview, QC scores, Facebook readiness.
         </p>
       </div>
 
